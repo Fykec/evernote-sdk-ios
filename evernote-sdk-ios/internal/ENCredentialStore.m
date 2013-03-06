@@ -98,7 +98,7 @@
     [defaults synchronize];
 }
 
-+ (void)saveCurrentProfile:(EvernoteService)code
++ (void)saveCurrentProfile:(EvernoteServiceType)code
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setInteger:code forKey:DEFAULTS_CREDENTIAL_CURRENT_PROFILE_KEY];

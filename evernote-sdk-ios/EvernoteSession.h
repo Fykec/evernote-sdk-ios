@@ -56,7 +56,7 @@ typedef enum {
     EVERNOTE_SERVICE_YINXIANG = 2,
     /** Evernote international and China services */
     EVERNOTE_SERVICE_BOTH = 3
-} EvernoteService;
+} EvernoteServiceType;
 
 /*!
  @typedef ENSessionState enum
@@ -85,6 +85,9 @@ typedef NS_ENUM(NSInteger, ENSessionState) {
 /** The `EvernoteSession` class provides a centralized place for authentication and gives access to the `EvernoteNoteStore` and `EvernoteUserStore` objects. Every application must have exactly one instance of `EvernoteSession`. When an application is ready, the application:didFinishLaunchingWithOptions: function is called, where you should call the class method setSharedSessionHost:consumerKey:consumerSecret:supportedService: Thereafter you can access this object by invoking the sharedSession class method.
  */
 @interface EvernoteSession : NSObject <ENOAuthViewControllerDelegate,SKStoreProductViewControllerDelegate>
+{
+    float _timeoutSeconds;
+}
 
 @property (nonatomic, copy) NSString *host;
 @property (nonatomic, copy) NSString *consumerKey;
@@ -192,6 +195,10 @@ typedef NS_ENUM(NSInteger, ENSessionState) {
  This will clear all the cookies as well.
  */
 - (void)logout;
+
+- (void)emptyCookieJar;
+
+- (void)setTimeout:(float)seconds;
 
 ///---------------------------------------------------------------------------------------
 /// @name Accessing user and notes data

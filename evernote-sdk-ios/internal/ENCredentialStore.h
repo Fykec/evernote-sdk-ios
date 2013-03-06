@@ -61,7 +61,7 @@
 - (void)clearAllCredentials;
 
 // Save the current selected boostrap profile.
-+ (void)saveCurrentProfile:(EvernoteService)code;
++ (void)saveCurrentProfile:(EvernoteServiceType)code;
 
 // Save the expiration date for the business authentication token
 + (void)saveBusinessTokenExpiration:(NSTimeInterval)expirationTimeStamp;

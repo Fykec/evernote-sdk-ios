@@ -110,6 +110,12 @@
 #endif
 }
 
+
+- (void)setTimeout:(float)seconds
+{
+    _timeoutSeconds = seconds;
+}
+
 - (id)init 
 {
     self = [super init];
@@ -236,7 +242,7 @@
 {
     if(!self.noteStoreClient) {
         NSURL *url = [NSURL URLWithString:[self credentials].noteStoreUrl];
-        THTTPClient *transport = [[THTTPClient alloc] initWithURL:url];
+        THTTPClient *transport = [[THTTPClient alloc] initWithURL:url userAgent:nil timeout:_timeoutSeconds];;
         TBinaryProtocol *protocol = [[TBinaryProtocol alloc] initWithTransport:transport];
         self.noteStoreClient = [[EDAMNoteStoreClient alloc] initWithProtocol:protocol];
     }
@@ -247,7 +253,7 @@
 {
     if(!self.userStoreClient) {
         NSURL *url = [NSURL URLWithString:[self userStoreUrl]];
-        THTTPClient *transport = [[THTTPClient alloc] initWithURL:url];
+        THTTPClient *transport = [[THTTPClient alloc] initWithURL:url userAgent:nil timeout:_timeoutSeconds];
         TBinaryProtocol *protocol = [[TBinaryProtocol alloc] initWithTransport:transport];
         self.userStoreClient = [[EDAMUserStoreClient alloc] initWithProtocol:protocol];
     }
