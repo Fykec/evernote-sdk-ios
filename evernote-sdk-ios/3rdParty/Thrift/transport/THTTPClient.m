@@ -25,7 +25,7 @@
 @interface THTTPClient ()
 
 @property (nonatomic,strong) ENAFURLConnectionOperation *httpOperation;
-@property (nonatomic,assign) BOOL isCancelled;
+@property (readwrite, nonatomic) NSOperationQueue *operationQueue;
 
 @end
 
@@ -46,7 +46,7 @@
 
   NSString * userAgent = mUserAgent;
   if (!userAgent) {
-    userAgent = @"Cocoa/THTTPClient";
+    userAgent = [THTTPClient createClientVersionString];
   }
   [mRequest setValue: userAgent forHTTPHeaderField: @"User-Agent"];
 
@@ -84,6 +84,9 @@
 
   // create our request data buffer
   mRequestData = [[NSMutableData alloc] initWithCapacity: 1024];
+    
+  self.operationQueue = [[NSOperationQueue alloc] init];
+  [self.operationQueue setMaxConcurrentOperationCount:1];
 
   return self;
 }
@@ -137,16 +140,19 @@
   NSURLResponse * response;
   NSError * error;
     NSData *responseData = nil;
-    if(self.isCancelled==NO) {
-        self.httpOperation = [[ENAFURLConnectionOperation alloc] initWithRequest:mRequest];
-        [[NSOperationQueue mainQueue] addOperations:@[self.httpOperation] waitUntilFinished:YES];
-        responseData = self.httpOperation.responseData;
-        response = self.httpOperation.response;
-        error = self.httpOperation.error;
-
+    self.httpOperation = [[ENAFURLConnectionOperation alloc] initWithRequest:mRequest];
+    if(self.uploadBlock) {
+        [self.httpOperation setUploadProgressBlock:self.uploadBlock];
     }
+    if(self.downloadBlock) {
+        [self.httpOperation setDownloadProgressBlock:self.downloadBlock];
+    }
+    [self.operationQueue addOperations:@[self.httpOperation] waitUntilFinished:YES];
+    responseData = self.httpOperation.responseData;
+    response = self.httpOperation.response;
+    error = self.httpOperation.error;
     [mRequestData setLength: 0];
-
+    
   if (responseData == nil) {
     @throw [TTransportException exceptionWithName: @"TTransportException"
                                 reason: @"Could not make HTTP request"
@@ -164,21 +170,56 @@
                                            reason: [NSString stringWithFormat: @"Bad response from HTTP server: %d",
                                                     [httpResponse statusCode]]];
   }
-
+  if([[httpResponse allHeaderFields] objectForKey:@"Content-Type"]) {
+      if([[[httpResponse allHeaderFields] objectForKey:@"Content-Type"] isEqualToString:@"application/x-thrift"] == NO) {
+          @throw [TTransportException exceptionWithName: @"TTransportException"
+                                                 reason: [NSString stringWithFormat: @"Bad response content type from HTTP server: %@",
+                                                          [[httpResponse allHeaderFields] objectForKey:@"Content-Type"]]];
+      }
+  }
   // phew!
   [mResponseData release_stub];
   mResponseData = [responseData retain_stub];
   mResponseDataOffset = 0;
+    self.uploadBlock = nil;
+    self.downloadBlock = nil;
     self.httpOperation = nil;
 }
 
 -(void) cancel {
-    self.isCancelled = YES;
     if(self.httpOperation) {
         [self.httpOperation cancel];
+        self.uploadBlock = nil;
+        self.downloadBlock = nil;
         self.httpOperation = nil;
     }
 }
 
+- (void)setUploadProgressBlock:(void (^)(NSUInteger bytesWritten, long long totalBytesWritten, long long totalBytesExpectedToWrite))block {
+    [self setUploadBlock:block];
+}
+
+- (void)setDownloadProgressBlock:(void (^)(NSUInteger bytesRead, long long totalBytesRead, long long totalBytesExpectedToRead))block {
+    [self setDownloadBlock:block];
+}
+
++ (NSString *)createClientVersionString
+{
+	NSString * clientName = nil;
+    NSString * locale = [NSString stringWithFormat: @"%@",
+                         [[NSLocale currentLocale] objectForKey: NSLocaleCountryCode]];
+    
+    NSDictionary *infoDic = [[NSBundle mainBundle] infoDictionary];
+    NSString *appName = [infoDic valueForKey:(id)kCFBundleNameKey];
+    NSString * buildVersion = [infoDic valueForKey: @"SourceVersion"];
+    if (buildVersion == nil) {
+        buildVersion = [infoDic valueForKey:(id)kCFBundleVersionKey];
+    }
+    clientName = [NSString stringWithFormat: @"%@ iPhone/%@ (%@);",
+                  appName,
+                  buildVersion,
+                  locale];
+	return clientName;
+}
 
 @end

@@ -36,6 +36,7 @@
 #import "NSString+URLEncoding.h"
 #import "Thrift.h"
 #import "NSDate+EDAMAdditions.h"
+#import "NSRegularExpression+ENAGRegex.h"
 
 #define SCHEME @"https"
 
@@ -312,6 +313,7 @@
 
 - (void)logout
 {
+    NSString* authToken = [[EvernoteSession sharedSession] authenticationToken];
     // remove all credentials from the store and keychain
     [self.credentialStore clearAllCredentials];
     
@@ -329,6 +331,9 @@
     
     // Clear all clients
     [self clearAllClients];
+    
+    // Revoke the token, this is not necessary, but it's good practice
+    [[EvernoteUserStore userStore] revokeLongSessionWithAuthenticationToken:authToken success:nil failure:nil];
 }
 
 - (void) clearAllClients {
@@ -452,17 +457,103 @@
 {
     NSString* deviceID = nil;
     if([[UIDevice currentDevice] respondsToSelector:@selector(identifierForVendor)]) {
-        deviceID = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
+        deviceID = [EvernoteSession deviceIdentifier];
     }
     if(deviceID == nil) {
         deviceID = [NSString string];
     }
+    NSString* deviceDescription = [EvernoteSession deviceDescription];
     NSDictionary *authParameters = @{ @"oauth_token":[tokenParameters objectForKey:@"oauth_token"],
                                       @"inapp":@"ios",
-                                      @"deviceDescription":[[UIDevice currentDevice] name],
+                                      @"deviceDescription":deviceDescription,
                                       @"deviceIdentifier":deviceID};
     NSString *queryString = [EvernoteSession queryStringFromParameters:authParameters];
     return [NSString stringWithFormat:@"%@://%@/OAuth.action?%@", SCHEME, self.host, queryString];    
+}
+
++ (NSString *)deviceIdentifier {
+    NSString *deviceIdentifier = nil;
+#if TARGET_OS_IPHONE
+    UIDevice *currentDevice = [UIDevice currentDevice];
+    if ([currentDevice respondsToSelector:@selector(identifierForVendor)]) {
+        deviceIdentifier = [[currentDevice identifierForVendor] UUIDString];
+    }
+#else
+    io_registry_entry_t ioRegistryRoot = IORegistryEntryFromPath(kIOMasterPortDefault, "IOService:/");
+    CFStringRef uuid = (CFStringRef) IORegistryEntryCreateCFProperty(ioRegistryRoot, CFSTR(kIOPlatformUUIDKey), kCFAllocatorDefault, 0);
+    IOObjectRelease(ioRegistryRoot);
+    deviceIdentifier = (__bridge_transfer NSString *)uuid;
+#endif
+    
+    if (deviceIdentifier == nil) {
+        // Alternatively we could try ethernet mac address...
+        NSUserDefaults *userDefaults = [NSUserDefaults standardUserDefaults];
+        NSString *uuid = [userDefaults objectForKey:@"EDAMHTTPClientUUID"];
+        if (uuid == nil) {
+            CFUUIDRef uuidRef = CFUUIDCreate(NULL);
+            CFStringRef uuidStringRef = CFUUIDCreateString(NULL, uuidRef);
+            CFRelease(uuidRef);
+            uuid = (__bridge_transfer NSString *)uuidStringRef;
+            
+            [userDefaults setObject:uuid forKey:@"EDAMHTTPClientUUID"];
+        }
+        deviceIdentifier = uuid;
+    }
+    
+    deviceIdentifier = [self scrubString:deviceIdentifier
+                              usingRegex:[EDAMLimitsConstants EDAM_DEVICE_ID_REGEX]
+                           withMaxLength:[EDAMLimitsConstants EDAM_DEVICE_ID_LEN_MAX]];
+    
+    return deviceIdentifier;
+}
+
++ (NSString *)deviceDescription {
+    NSString *deviceDescription = nil;
+#if TARGET_OS_IPHONE
+    UIDevice *currentDevice = [UIDevice currentDevice];
+    deviceDescription = [[currentDevice name] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    
+    if ([deviceDescription length] == 0) {
+        deviceDescription = [currentDevice model];
+    }
+    
+#if TARGET_IPHONE_SIMULATOR
+    deviceDescription = [deviceDescription stringByAppendingFormat:@" %@ (%@)", [currentDevice systemVersion], [NSString string]];
+#endif
+#endif
+    if ([deviceDescription length] == 0) {
+        deviceDescription = [NSString string];
+    }
+    
+    deviceDescription = [self scrubString:deviceDescription
+                               usingRegex:[EDAMLimitsConstants EDAM_DEVICE_DESCRIPTION_REGEX]
+                            withMaxLength:[EDAMLimitsConstants EDAM_DEVICE_DESCRIPTION_LEN_MAX]];
+    return deviceDescription;
+}
+
+#pragma mark -
+#pragma mark Device id/name
++ (NSString *) scrubString:(NSString *)string
+                usingRegex:(NSString *)regexPattern
+             withMaxLength:(uint16_t)maxLength
+{
+    if ([string length] > maxLength) {
+        string = [string substringToIndex:maxLength];
+    }
+    
+    NSRegularExpression * regex = [NSRegularExpression enRegexWithPattern: regexPattern];
+    if ([regex enFindInString: string] == NO) {
+        NSMutableString * newString = [NSMutableString stringWithCapacity: [string length]];
+        for (NSUInteger i = 0; i < [string length]; i++) {
+            NSString * oneCharSubString = [string substringWithRange: NSMakeRange(i, 1)];
+            if ([regex enFindInString: string]) {
+                [newString appendString: oneCharSubString];
+            }
+        }
+        string = newString;
+    }
+    
+    return string;
 }
 
 - (BOOL)handleOpenURL:(NSURL *)url
@@ -549,9 +640,15 @@
         if (statusCode != 200) {
             NSLog(@"Received error HTTP response code: %d", statusCode);
             NSLog(@"%@", string);
-            [self completeAuthenticationWithError:[NSError errorWithDomain:EvernoteSDKErrorDomain
-                                                           code:EvernoteSDKErrorCode_TRANSPORT_ERROR 
-                                                       userInfo:nil]];
+            NSDictionary* userInfo = nil;
+            if(statusCode) {
+                NSNumber* statusCodeNumber = [NSNumber numberWithInteger:statusCode];
+                userInfo = @{@"statusCode": statusCodeNumber};
+            }
+            [self completeAuthenticationWithError:
+             [NSError errorWithDomain:EvernoteSDKErrorDomain
+                                 code:EvernoteSDKErrorCode_TRANSPORT_ERROR
+                             userInfo:userInfo]];
             self.receivedData = nil;
             self.response = nil;
             return;
@@ -811,7 +908,8 @@
 - (void)oauthViewControllerDidCancel:(ENOAuthViewController *)sender
 {
     [self.viewController dismissViewControllerAnimated:YES completion:^{
-        [self completeAuthenticationWithError:nil];
+        NSError* error = [NSError errorWithDomain:EvernoteSDKErrorDomain code:EvernoteSDKErrorCode_USER_CANCELLED userInfo:nil];
+        [self completeAuthenticationWithError:error];
     }];
 }
 
@@ -924,13 +1022,21 @@
 }
 
 - (void)installEvernoteAppUsingViewController:(UIViewController*)viewController {
+    [self installAppWithId:281796108 withViewController:viewController];
+}
+
+- (void)installSkitchAppUsingViewController:(UIViewController*)viewController {
+    [self installAppWithId:490505997 withViewController:viewController];
+}
+
+- (void)installAppWithId:(NSInteger)appID withViewController:(UIViewController*) viewController {
     if([SKStoreProductViewController class]) {
         SKStoreProductViewController *storeViewController =
         [[SKStoreProductViewController alloc] init];
         [storeViewController setDelegate:self];
         NSDictionary *parameters =
         @{SKStoreProductParameterITunesItemIdentifier:
-              [NSNumber numberWithInteger:281796108]};
+              [NSNumber numberWithInteger:appID]};
         [storeViewController loadProductWithParameters:parameters
                                        completionBlock:^(BOOL result, NSError *error) {
                                            if (result)
@@ -940,7 +1046,8 @@
                                        }];
     }
     else {
-        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://itunes.apple.com/us/app/evernote/id281796108"]];
+        NSString* appURL = [NSString stringWithFormat:@"https://itunes.apple.com/us/app/evernote/id%d",appID];
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:appURL]];
     }
 }
 

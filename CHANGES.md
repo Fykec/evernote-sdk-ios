@@ -1,3 +1,31 @@
+= 1.3.0 
+
+* ENML writer
+* Support for creating Reminders using Evernote app
+* Bug fixes/ XCode 5 compatibilty
+
+= 1.2.1 / 2013-06-12
+
+* Added RelatedQuery.referenceUri
+* New system exceptions thrown by getPublicNotebook and authenticateToSharedNote when the target content has been taken down.
+* Added SharedNotebook.recipientSettings, NoteStore.setSharedNotebookRecipientSettings
+* Added optional authenticationToken parameter to NoteStore.authenticateToSharedNote, only needed for YXBJ
+* Added creatorId and lastEditorId fields to NoteAttributes
+* Added two factor authentication functionality to UserStore.authenticate and authenticateLongSession, added UserStore.completeTwoFactorAuthentication.
+* Modified sample app to use table view
+
+= 1.2.0 / 2013-04-02
+
+* API for Reminders
+* View a note using the Evernote for iOS app
+* Bug fixes
+
+= 1.1.1 / 2013-03-26
+
+* Adding ability to monitor download/upload progress
+* Handle invalid tokens
+* Bug fixes
+
 = 1.1.0 / 2013-03-01
 
 * ENML to HTML converter

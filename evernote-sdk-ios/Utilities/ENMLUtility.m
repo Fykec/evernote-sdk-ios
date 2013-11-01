@@ -56,7 +56,7 @@ typedef void (^ENMLHTMLCompletionBlock)(NSString* html, NSError *error);
     if (mime == nil) {
         mime = ENMIMETypeOctetStream;
     }
-    NSString* dataHashHex = [dataHash lowercaseHexDigits];
+    NSString* dataHashHex = [dataHash enlowercaseHexDigits];
     NSString* mediaTag = [NSString stringWithFormat:@"<%@ type =\"%@\" hash=\"%@\"/>",
                           ENMLTagMedia,
                           mime,
@@ -107,11 +107,12 @@ typedef void (^ENMLHTMLCompletionBlock)(NSString* html, NSError *error);
     }
     else if([elementName isEqualToString:ENMLTagMedia] && self.resources) {
         NSString *mediaHash = [attributeDict objectForKey:@"hash"];
-        NSData* dataHash =  [NSData dataWithHexDigits:mediaHash];
+        NSData* dataHash =  [NSData endataWithHexDigits:mediaHash];
         EDAMResource *foundResource = nil;
         for (EDAMResource* resource in self.resources) {
             if([[[resource data] bodyHash] isEqualToData:dataHash]) {
                 foundResource = resource;
+                break;
             }
         }
         NSMutableDictionary *scrubbedAttributes = [NSMutableDictionary dictionaryWithDictionary:attributeDict];
@@ -177,7 +178,7 @@ typedef void (^ENMLHTMLCompletionBlock)(NSString* html, NSError *error);
     
     NSMutableDictionary *imageAttributes = [NSMutableDictionary dictionaryWithDictionary:attributes];
     NSString *mime = [resource mime];
-    NSString* imgStr = [NSString stringWithFormat:@"data:%@;base64,%@",mime,[[[resource data] body] base64Encoding]];
+    NSString* imgStr = [NSString stringWithFormat:@"data:%@;base64,%@",mime,[[[resource data] body] enbase64Encoding]];
 
     [imageAttributes setObject:imgStr
                         forKey:@"src"];

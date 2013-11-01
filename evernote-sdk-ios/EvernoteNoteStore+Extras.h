@@ -155,8 +155,31 @@ inBusinessNotebook:(EDAMLinkedNotebook*) notebook
  */
 - (void)viewNoteInEvernote:(EDAMNote*)note;
 
+/** View a note in a linked notebook using the Evernote for iOS app
+ 
+ After completetion the ENSessionDelegate will be used to confirm success or failure.
+ 
+ @param note The note that needs to be viewed.
+ @param linkedNotebook The linked notebook of the note.
+ */
+- (void)viewNoteInEvernote:(EDAMNote*)note inLinkedNotebook:(EDAMLinkedNotebook*)linkedNotebook;
+
 /** Cancel the first operation in the queue
  */
 - (void) cancel;
+
+/**
+ Sets a callback to be called when an undetermined number of bytes have been uploaded to the server.
+ 
+ @param block A block object to be called when an undetermined number of bytes have been uploaded to the server. This block has no return value and takes three arguments: the number of bytes written since the last time the upload progress block was called, the total bytes written, and the total bytes expected to be written during the request, as initially determined by the length of the HTTP body. This block may be called multiple times, and will execute on the main thread.
+ */
+- (void)setUploadProgressBlock:(void (^)(NSUInteger bytesWritten, long long totalBytesWritten, long long totalBytesExpectedToWrite))block;
+
+/**
+ Sets a callback to be called when an undetermined number of bytes have been downloaded from the server.
+ 
+ @param block A block object to be called when an undetermined number of bytes have been downloaded from the server. This block has no return value and takes three arguments: the number of bytes read since the last time the download progress block was called, the total bytes read, and the total bytes expected to be read during the request, as initially determined by the expected content size of the `NSHTTPURLResponse` object. This block may be called multiple times, and will execute on the main thread.
+ */
+- (void)setDownloadProgressBlock:(void (^)(NSUInteger bytesRead, long long totalBytesRead, long long totalBytesExpectedToRead))block;
 
 @end

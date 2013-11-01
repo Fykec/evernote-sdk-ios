@@ -1,9 +1,9 @@
-Evernote SDK for iOS version 1.1.0
+Evernote SDK for iOS version 1.3.0
 =========================================
 
 What this is
 ------------
-A pleasant iOS-wrapper around the Evernote Cloud API (v1.22), using OAuth for authentication. 
+A pleasant iOS-wrapper around the Evernote Cloud API (v1.25), using OAuth for authentication. 
 
 Required reading
 ----------------
@@ -21,9 +21,10 @@ You can do this on the [Evernote Developers portal page](http://dev.evernote.com
 
 You have a few options:
 
-- Copy the evernote-sdk-ios source code into your Xcode project.
+- Copy the evernote-sdk-ios folder into your Xcode project.
 - Add the evernote-sdk-ios xcodeproj to your project/workspace.
-- Build the evernote-sdk-ios as a static library and include the .h's and .a.
+- Build the evernote-sdk-ios as a static library and include the .h's and .a. (Make sure to add the `-ObjC` flag to your "Other Linker flags" if you choose this option). 
+More info [here](http://developer.apple.com/library/ios/#technotes/iOSStaticLibraries/Articles/configuration.html#/apple_ref/doc/uid/TP40012554-CH3-SW2). 
 - Use [cocoapods](http://cocoapods.org), a nice Objective-C dependency manager. Our pod name is "Evernote-SDK-iOS".
 
 ### Link with frameworks
@@ -33,6 +34,17 @@ Add the following frameworks in the "Link Binary With Libraries" phase
 
 - Security.framework
 - StoreKit.framework
+- MobileCoreServices.framework
+- libxml2.dylib
+
+![Add '${SDKROOT}/usr/include/libxml2'](LinkLibraries.png)
+
+### Add header search path
+
+Add `${SDKROOT}/usr/include/libxml2` to your header search path.
+
+![Add '${SDKROOT}/usr/include/libxml2'](AddHeaderSearchPath.png)
+
 
 ### Modify your application's main plist file
 
@@ -54,7 +66,7 @@ Create an array key called URL types with a single array sub-item called URL Sch
 
 First you set up the shared EvernoteSession, configuring it with your consumer key and secret. 
 
-The SDK now supports the Yinxiang Biji service by default. 
+The SDK now supports the Yinxiang Biji service by default. Please make sure your consumer key has been [activated](http://dev.evernote.com/support/) for the China service.
 
 Do something like this in your AppDelegate's `application:didFinishLaunchingWithOptions:` method.
 
@@ -63,6 +75,7 @@ Do something like this in your AppDelegate's `application:didFinishLaunchingWith
 		// Initial development is done on the sandbox service
 		// Change this to BootstrapServerBaseURLStringUS to use the production Evernote service
 		// Change this to BootstrapServerBaseURLStringCN to use the Yinxiang Biji production service
+		// Bootstrapping is supported by default with either BootstrapServerBaseURLStringUS or BootstrapServerBaseURLStringCN
 		// BootstrapServerBaseURLStringSandbox does not support the  Yinxiang Biji service
 		NSString *EVERNOTE_HOST = BootstrapServerBaseURLStringSandbox;
     
@@ -142,6 +155,26 @@ E.g.,
                                 }];
                                 
 Full information on the Evernote NoteStore and UserStore API is available on the [Evernote Developers portal page](http://dev.evernote.com/documentation/cloud/).
+
+### Creating note content
+
+The SDK includes an ENML writer that helps you write notes. This is useful to write styled notes,supports adding resources like images to the note and also supports writing encrypted fields to Evernote.
+E.g.,
+
+    ENMLWriter* myWriter = [[ENMLWriter alloc] init];
+    [myWriter startDocument];
+    [myWriter startElement:@"span"];
+    [myWriter startElement:@"br"];
+    [myWriter endElement];
+    [myWriter writeResource:resource];
+    [myWriter endElement];
+    [myWriter endDocument];
+    EDAMNote *newNote = [[EDAMNote alloc] init];
+    newNote.content = myWriter.contents;
+    newNote.title = "Test note";
+    newNote.contentLength = myWriter.contents.length;
+
+`resource` is of type EDAMResource. For more examples, please see the sample app code.
 
 ### Prompting the user to install the Evernote for iOS app
 

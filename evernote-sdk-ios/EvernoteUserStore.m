@@ -81,7 +81,7 @@
                               failure:(void(^)(NSError *error))failure
 {
     [self invokeAsyncIdBlock:^id {
-        return [self.userStore getPublicUserInfo:[[EvernoteSession sharedSession] authenticationToken]];
+        return [self.userStore getPublicUserInfo:username];
     } success:success failure:failure];
 }
 
@@ -106,6 +106,14 @@
 {
     [self invokeAsyncIdBlock:^id {
         return [self.userStore authenticateToBusiness:[[EvernoteSession sharedSession] authenticationToken]];
+    } success:success failure:failure];
+}
+
+- (void)revokeLongSessionWithAuthenticationToken:(NSString*)authenticationToken
+                                         success:(void(^)())success
+                             failure:(void(^)(NSError *error))failure {
+    [self invokeAsyncVoidBlock:^void {
+        [self.userStore revokeLongSession:authenticationToken];
     } success:success failure:failure];
 }
 

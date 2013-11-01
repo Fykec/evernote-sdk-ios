@@ -33,6 +33,7 @@
 #import "ENApplicationBridge.h"
 #import "ENApplicationBridge_Private.h"
 #import "EvernoteUserStore.h"
+#import "NSDate+EDAMAdditions.h"
 
 @implementation EvernoteNoteStore (Extras)
 
@@ -67,6 +68,18 @@
         failure(error);
     }];
 
+}
+
+- (void)getCorrespondingNotebookForSharedNotebook:(EDAMSharedNotebook *)notebook
+                                            success:(void(^)(EDAMNotebook *notebook))success
+                                            failure:(void(^)(NSError *error))failure {
+    EvernoteNoteStore* noteStore = [EvernoteNoteStore noteStore];
+    [noteStore authenticateToSharedNotebookWithShareKey:notebook.shareKey success:^(EDAMAuthenticationResult *result) {
+        NSLog(@"Auth result : %@",result);
+        
+    } failure:^(NSError *error) {
+        NSLog(@"Error : %@",error);
+    }];
 }
 
 #pragma mark - Evernote Business Notebooks
@@ -204,6 +217,16 @@
         [request setSourceApplication:[note.attributes sourceApplication]];
         [request setSourceURL:[NSURL URLWithString:[note.attributes sourceURL]]];
         [request setConsumerKey:[[EvernoteSession sharedSession] consumerKey]];
+        EDAMNoteAttributes* attributes = note.attributes;
+        if(attributes.reminderTimeIsSet) {
+            request.reminderTime = [NSDate endateFromEDAMTimestamp:attributes.reminderTime];
+        }
+        if(attributes.reminderDoneTimeIsSet) {
+            request.reminderDoneTime = [NSDate endateFromEDAMTimestamp:attributes.reminderDoneTime];
+        }
+        if(attributes.reminderOrderIsSet) {
+            request.reminderOrder = [NSDate endateFromEDAMTimestamp:attributes.reminderOrder];
+        }
         [appBridgeData setObject:[NSNumber numberWithUnsignedInt:kEN_ApplicationBridge_DataVersion] forKey:kEN_ApplicationBridge_DataVersionKey];
         [appBridgeData setObject:[request requestIdentifier] forKey:kEN_ApplicationBridge_RequestIdentifierKey];
         [appBridgeData setObject:[[EvernoteSession sharedSession] consumerKey] forKey:kEN_ApplicationBridge_ConsumerKey];
@@ -223,11 +246,9 @@
                 [appBridgeData setObject:appName forKey:kEN_ApplicationBridge_CallerAppNameKey];
             }
         }
-        NSString* pasteboardName = [NSString stringWithFormat:@"com.evernote.bridge.%@",[[EvernoteSession sharedSession] consumerKey]];
-        UIPasteboard *pasteboard = [UIPasteboard pasteboardWithName:pasteboardName create:YES];
-        [pasteboard setPersistent:YES];
+        UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
         [pasteboard setData:[NSKeyedArchiver archivedDataWithRootObject:appBridgeData] forPasteboardType:@"$EvernoteApplicationBridgeData$"];
-        NSString* openURL = [NSString stringWithFormat:@"en://app-bridge/consumerKey/%@/pasteBoardName/%@",[[EvernoteSession sharedSession] consumerKey],pasteboardName];
+        NSString* openURL = [NSString stringWithFormat:@"en://app-bridge/consumerKey/%@/pasteBoardName/%@",[[EvernoteSession sharedSession] consumerKey],pasteboard.name];
         BOOL success = [[UIApplication sharedApplication] openURL:[NSURL URLWithString:openURL]];
         if(success) {
             
@@ -266,11 +287,9 @@
             [appBridgeData setObject:[NSNumber numberWithUnsignedInt:kEN_ApplicationBridge_DataVersion] forKey:kEN_ApplicationBridge_DataVersionKey];
             [appBridgeData setObject:[request requestIdentifier] forKey:kEN_ApplicationBridge_RequestIdentifierKey];
             [appBridgeData setObject:[[EvernoteSession sharedSession] consumerKey] forKey:kEN_ApplicationBridge_ConsumerKey];
-            NSString* pasteboardName = [NSString stringWithFormat:@"com.evernote.bridge.%@",[[EvernoteSession sharedSession] consumerKey]];
-            UIPasteboard *pasteboard = [UIPasteboard pasteboardWithName:pasteboardName create:YES];
-            [pasteboard setPersistent:YES];
+            UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
             [pasteboard setData:[NSKeyedArchiver archivedDataWithRootObject:appBridgeData] forPasteboardType:@"$EvernoteApplicationBridgeData$"];
-            NSString* openURL = [NSString stringWithFormat:@"en://app-bridge/consumerKey/%@/pasteBoardName/%@",[[EvernoteSession sharedSession] consumerKey],pasteboardName];
+            NSString* openURL = [NSString stringWithFormat:@"en://app-bridge/consumerKey/%@/pasteBoardName/%@",[[EvernoteSession sharedSession] consumerKey],pasteboard.name];
             BOOL success = [[UIApplication sharedApplication] openURL:[NSURL URLWithString:openURL]];
             if(success) {
                 
@@ -287,11 +306,65 @@
     }
 }
 
+- (void)viewNoteInEvernote:(EDAMNote*)note inLinkedNotebook:(EDAMLinkedNotebook*)linkedNotebook {
+    if([[EvernoteSession sharedSession] isEvernoteInstalled]) {
+        NSMutableDictionary* appBridgeData = [NSMutableDictionary dictionary];
+        ENNoteViewRequest* request = [[ENNoteViewRequest alloc] init];
+        [request setConsumerKey:[[EvernoteSession sharedSession] consumerKey]];
+        [request setNoteID:note.guid];
+        [request setShardID:linkedNotebook.shardId];
+        [request setLinkedNotebookID:linkedNotebook.guid];
+        [[EvernoteUserStore userStore] getUserWithSuccess:^(EDAMUser *user) {
+            [request setUserID:user.id];
+            NSData *requestData = [NSKeyedArchiver archivedDataWithRootObject:request];
+            [appBridgeData setObject:requestData forKey:kEN_ApplicationBridge_RequestDataKey];
+            
+            NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
+            if (infoDictionary != nil) {
+                NSString *appIdentifier = [infoDictionary objectForKey:(NSString *)kCFBundleIdentifierKey];
+                if (appIdentifier != nil) {
+                    [appBridgeData setObject:appIdentifier forKey:kEN_ApplicationBridge_CallerAppIdentifierKey];
+                }
+                NSString *appName = [infoDictionary objectForKey:(NSString *)kCFBundleNameKey];
+                if (appName != nil) {
+                    [appBridgeData setObject:appName forKey:kEN_ApplicationBridge_CallerAppNameKey];
+                }
+            }
+            [appBridgeData setObject:[NSNumber numberWithUnsignedInt:kEN_ApplicationBridge_DataVersion] forKey:kEN_ApplicationBridge_DataVersionKey];
+            [appBridgeData setObject:[request requestIdentifier] forKey:kEN_ApplicationBridge_RequestIdentifierKey];
+            [appBridgeData setObject:[[EvernoteSession sharedSession] consumerKey] forKey:kEN_ApplicationBridge_ConsumerKey];
+            UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
+            [pasteboard setData:[NSKeyedArchiver archivedDataWithRootObject:appBridgeData] forPasteboardType:@"$EvernoteApplicationBridgeData$"];
+            NSString* openURL = [NSString stringWithFormat:@"en://app-bridge/consumerKey/%@/pasteBoardName/%@",[[EvernoteSession sharedSession] consumerKey],pasteboard.name];
+            BOOL success = [[UIApplication sharedApplication] openURL:[NSURL URLWithString:openURL]];
+            if(success) {
+                
+            }
+            
+        } failure:^(NSError *error) {
+            ;
+        }];
+    }
+    else {
+        if([[[EvernoteSession sharedSession] delegate] respondsToSelector:@selector(evernoteAppNotInstalled)]) {
+            [[[EvernoteSession sharedSession] delegate] evernoteAppNotInstalled];
+        }
+    }
+}
+
 
 #pragma mark - Custom extra function
 
 - (void)cancel {
     [[self currentNoteStore] cancel];
+}
+
+- (void)setUploadProgressBlock:(void (^)(NSUInteger bytesWritten, long long totalBytesWritten, long long totalBytesExpectedToWrite))block {
+    [[self currentNoteStore] setUploadProgressBlock:block];
+}
+
+- (void)setDownloadProgressBlock:(void (^)(NSUInteger bytesRead, long long totalBytesRead, long long totalBytesExpectedToRead))block {
+    [[self currentNoteStore] setDownloadProgressBlock:block];
 }
 
 @end
